@@ -8,8 +8,6 @@ last_date = as.Date("2022-04-18")
 dates_data <-
   tibble(date = seq(first_date, last_date, by = "day"))
 
-branch = "master"
-
 plot_for_branch = function(branch) {
   dates_data = 
     tibble(
@@ -29,9 +27,10 @@ plot_for_branch = function(branch) {
   }
 
   all_coefficients =
-    master_dates_data %>%
+    dates_data %>%
     group_by(date) %>%
-    summarize(read_coefficients(date, branch))
+    summarize(read_coefficients(date, branch)) %>%
+    ungroup()
 
   PM_coefficients = 
     all_coefficients %>%
@@ -46,6 +45,18 @@ plot_for_branch = function(branch) {
         "Not considered by Wu et al."
       )
     )
+
+  # write out the final estimates
+  write_csv(
+    PM_coefficients %>% 
+    filter(date == last(date)) %>%
+    select(
+      lower_bound,
+      log_estimate,
+      upper_bound
+    ),
+    file.path("data", branch, "final_estimates.csv")
+  )
 
   # Wu et al.'s figure
   early_plot = 

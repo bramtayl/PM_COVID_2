@@ -131,7 +131,7 @@ plot =
       hjust = 1
     )
   ) +
-  labs(y = "Correlation with the proportion of\nCOVID deaths that occured within\nthe last 30 days")
+  labs(y = "Correlation with the proportion of\nCOVID-19 deaths that occured within\nthe last 30 days")
 
 ggsave(file.path("results", "master", "color_graph.png"),
   plot = plot,
