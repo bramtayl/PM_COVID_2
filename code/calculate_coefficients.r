@@ -1,5 +1,6 @@
 library(dplyr)
 library(glmmTMB)
+library(pander)
 library(readr)
 
 run_regression = function(one_day_data) {
@@ -68,7 +69,7 @@ save_coefficients = function(
 
 # if you stop the code before R finished running it
 # you can resume by choosing a later first_date
-Wu_analysis = function (data, branch, first_date = as.Date("2020-04-18")) {
+save_daily_coefficients = function (data, branch, first_date = as.Date("2020-04-18")) {
     data %>%
     filter(date >= first_date) %>%
     group_by(date) %>%
@@ -77,7 +78,7 @@ Wu_analysis = function (data, branch, first_date = as.Date("2020-04-18")) {
 
 # do for two separate branches
 master_data = read_csv(file.path("data", "master", "combined.csv"))
-Wu_analysis(master_data, "master")
+save_daily_coefficients(master_data, "master")
 
 updated_data = read_csv(file.path("data", "updated_data", "combined.csv"))
-Wu_analysis(updated_data, "updated_data")
+save_daily_coefficients(updated_data, "updated_data")
