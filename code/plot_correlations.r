@@ -7,7 +7,12 @@ library(tidyr)
 all_data_unique <-
     read_csv(file.path("data", "master", "combined.csv")) %>%
     # rename for nicer plot labels
-    rename(Date = date) %>%
+    rename(
+        Date = date,
+        `Proportion Black residents` = proportion_black,
+        `Proportion Hispanic residents` = proportion_hispanic,
+        `PM2.5 concentration` = PM2.5_concentration
+    ) %>%
     group_by(Date, metro_code) %>%
     slice(1) %>%
     ungroup()
@@ -23,13 +28,9 @@ all_dates_and_counties <-
     # recreate the controls dataset
     all_data_unique %>%
     # rename for nicer plot labels
-    rename(
-        `Proportion Black residents` = proportion_black,
-        `Proportion Hispanic residents` = proportion_hispanic,
-        `PM2.5 concentration` = PM2.5_concentration
-    ) %>%
     group_by(metro_code) %>%
     summarize(
+        population = first(population),
         population_density = first(population_density),
         `Proportion Black residents` = first(`Proportion Black residents`),
         `Proportion Hispanic residents` = first(`Proportion Hispanic residents`),
@@ -57,17 +58,17 @@ all_dates_and_counties <-
         cumulative_covid_deaths_filled =
             cummax(coalesce(cumulative_covid_deaths, 0)),
         # find the proportion of the total within the last 30 days
-        proportion_so_far = 
+        monthly_mortality =
             (
                 cumulative_covid_deaths_filled -
                 lag(cumulative_covid_deaths_filled, 30)
             # the last is the total
-            ) / last(cumulative_covid_deaths_filled)
+            ) / population
     ) %>%
     ungroup() %>%
     # remove missing data (a small intervals at start where window goes
     # outside of the available dates)
-    filter(!is.na(proportion_so_far)) %>%
+    filter(!is.na(monthly_mortality)) %>%
     # transformations for graph
     mutate(
         `Log(population density)` = log(population_density),
@@ -78,7 +79,7 @@ correlations <-
     all_dates_and_counties %>%
     select(
         Date,
-        proportion_so_far,
+        monthly_mortality,
         `Proportion Hispanic residents`,
         `Proportion Black residents`,
         `Log(median household income)`,
@@ -94,15 +95,15 @@ correlations <-
             `PM2.5 concentration`,
             `Log(population density)`
         ),
-        names_to = "Variable",
+        names_to = "Correlate of lagged 30-day COVID-19 mortality rate",
         values_to = "variable_value"
     ) %>%
     # calculate correlations for each variable and date
-    group_by(Date, Variable) %>%
+    group_by(Date, `Correlate of lagged 30-day COVID-19 mortality rate`) %>%
     summarize(
         correlation = cor(
             variable_value, 
-            proportion_so_far
+            monthly_mortality
         )
     ) %>%
     ungroup()
@@ -114,7 +115,7 @@ plot =
   aes(
     x = Date,
     y = correlation,
-    color = Variable
+    color = `Correlate of lagged 30-day COVID-19 mortality rate`
   ) +
   geom_line() +
   theme_bw() +
@@ -131,7 +132,7 @@ plot =
       hjust = 1
     )
   ) +
-  labs(y = "Correlation with the proportion of\nCOVID-19 deaths that occured within\nthe last 30 days")
+  labs(y = "r (correlation coefficient)")
 
 ggsave(file.path("results", "master", "color_graph.png"),
   plot = plot,

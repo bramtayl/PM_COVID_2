@@ -194,7 +194,7 @@ metro_covid_data <-
     ungroup() %>%
     bind_rows(already_aggregated)
 
-# Wu et al. found counties with no reported covid on an early date. {JHU
+# Wu et al. found counties with no reported covid on an early date. JHU
 # might have omitted these counties on a later date.
 no_early_covid <-
     metro_covid_data %>%
