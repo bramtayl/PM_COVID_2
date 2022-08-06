@@ -57,9 +57,8 @@ county_data <-
         metro_code = coalesce(metro_code, county_code),
     )
 
-# Wu et al. read mortality data for 4 age groups from CDC Wonder. Wu et al.
-# did not use the mortality data, but only the population counts, to
-# calculate demographic proportions
+# Wu et al. read mortality data for 4 age groups from CDC Wonder.
+# Wu et al. did not use the mortality data, but only the population counts, to calculate demographic proportions
 age_group_files <- tibble(
     file = file.path("data", c(
         "county_old_mortality.txt",
@@ -88,7 +87,7 @@ age_group_data <-
             )
     )
 
-demographic_data <-
+DEMOGRAPHIC_DATA <-
     read.table(file.path(
         "data",
         "county_base_mortality.txt"
@@ -109,7 +108,6 @@ demographic_data <-
         proportion = coalesce(age_group_population / whole_population, 0),
     ) %>%
     select(variable, county_code, proportion) %>%
-    # Fill 0 for missing (again)
     pivot_wider(
         names_from = variable,
         values_from = proportion
@@ -133,14 +131,15 @@ get_covid_data <- function(a_date) {
         select(-country_abbreviation)
 }
 
-dates_data = 
+# all dates with covid data available
+DATES_DATA = 
     tibble(
         date = mdy(dir(file.path("data", "covid")))
     ) %>%
     arrange(date)
 
 daily_covid_data <-
-    dates_data %>%
+    DATES_DATA %>%
     group_by(date) %>%
     summarize(get_covid_data(date)) %>%
     ungroup() %>%
@@ -170,7 +169,7 @@ already_aggregated <-
     rename(metro_code = county_code)
 
 metro_covid_data <-
-    # Aggregate the NYC data after JHU stopped aggregating it.
+    # Aggregate the NYC data ourselves after JHU stopped aggregating it.
     daily_covid_data %>%
     select(-county_name) %>%
     inner_join(
@@ -194,8 +193,8 @@ metro_covid_data <-
     ungroup() %>%
     bind_rows(already_aggregated)
 
-# Wu et al. found counties with no reported covid on an early date. JHU
-# might have omitted these counties on a later date.
+# Wu et al. found counties with no reported covid on an early date.
+# JHU might have omitted these counties on a later date.
 no_early_covid <-
     metro_covid_data %>%
     filter(
@@ -207,10 +206,11 @@ no_early_covid <-
     mutate(in_no_early_covid = TRUE)
 
 # Find date of first case in each county
-first_covid_data <-
+FIRST_COVID_DATA <-
     metro_covid_data %>%
     filter(confirmed_covid_cases > 0) %>%
     group_by(metro_code) %>%
+    # for each metro code, get the row with the first date
     arrange(date) %>%
     slice(1) %>%
     ungroup() %>%
@@ -219,18 +219,17 @@ first_covid_data <-
         first_confirmed_date = date
     )
 
-expanded_covid_data <-
+WU_COVID_DATA <-
     full_join(
         metro_covid_data,
-        # Replicate no early covid for all dates
+        # Replicate `no_early_covid` for all dates
         # Otherwise, some dates will be missing after the full join
         full_join(
             no_early_covid,
-            dates_data,
+            DATES_DATA,
             by = character()
         )
     ) %>%
-    left_join(first_covid_data) %>%
     mutate(
         cumulative_covid_deaths =
         # Fill in zero if the county was mentioned early but not later
@@ -239,9 +238,13 @@ expanded_covid_data <-
                 0,
                 cumulative_covid_deaths
             )
+    ) %>%
+    filter(
+        # Wu only used counties mentioned in the covid data or in the early covid data
+        in_contemporary_covid_data | in_no_early_covid
     )
 
-health_data <-
+HEALTH_DATA <-
     read_csv(
         file.path(
             "data",
@@ -262,7 +265,7 @@ health_data <-
         proportion_smoke = v009_rawvalue
     )
 
-hospitals_data <-
+HOSPITALS_DATA <-
     read_csv(
         file.path(
             "data",
@@ -288,7 +291,7 @@ hospitals_data <-
         hospital_beds = sum(hospital_beds, na.rm = TRUE)
     )
 
-policy_data <-
+POLICY_DATA <-
     read_csv(file.path(
         "data",
         "state_policy0410.csv"
@@ -306,7 +309,7 @@ policy_data <-
         in_policy_data = TRUE
     )
 
-temperature_data <- 
+TEMPERATURE_DATA <- 
     read_csv(
         file.path(
             "data",
@@ -331,25 +334,57 @@ temperature_data <-
         summer_mean_relative_humidity = mean(summer_mean_relative_humidity)
     )
 
-combine_data <- function(
-    dates_data,
+# For monthly covid mortality, we need to make sure we have a value for every possible date/metro combination
+# even if it's missing
+# to make it easier, first get rid of duplicated counties in the covid data
+covid_data_unique <-
+    metro_covid_data %>%
+    # remove duplications by just using the first row
+    group_by(date, metro_code) %>%
+    slice(1) %>%
+    ungroup()
+
+MONTHLY_COVID_DATA <-
+    covid_data_unique %>%
+    select(metro_code) %>%
+    unique %>%
+    full_join(
+        DATES_DATA,
+        # find all possible date/metro combinations
+        by = character()
+    ) %>%
+    left_join(covid_data_unique) %>%
+    group_by(metro_code) %>%
+    arrange(date) %>%
+    mutate(
+        # cumulative covid deaths must start at zero and always increase, by definition
+        # we can use fact this to fill in a lot of missing data
+        cumulative_covid_deaths = 
+            cummax(coalesce(cumulative_covid_deaths, 0)),
+        # find the the total within the last 30 days
+        monthly_covid_deaths =
+            cumulative_covid_deaths -
+            lag(cumulative_covid_deaths, 30)
+    ) %>%
+    ungroup()
+
+# combine the controls (really everything except the covid data)
+# do these separately because we will have to aggregate NYC first
+# make a function so we can do this for both branches
+combine_controls <- function(
     census_branch = "master",
     pm_branch = "master",
-    # a guess of the date they generated their figure
-    Wu_run_date = as.Date("2020-09-07"),
-    # an early date that Wu used to figure out which counties JHU is keeping
-    # track of
-    reference_date = as.Date("2020-03-30")
-    # R won't let me use these as keywords
-    # Capture instead
-    # expanded_covid_data = expanded_covid_data,
-    # temperature_data = temperature_data,
-    # health_data = health_data,
-    # demographic_data = demographic_data,
-    # hospitals_data = hospitals_data,
-    # policy_data = policy_data
+    dates_data = DATES_DATA,
+    first_covid_data = FIRST_COVID_DATA,
+    temperature_data = TEMPERATURE_DATA,
+    health_data = HEALTH_DATA,
+    demographic_data = DEMOGRAPHIC_DATA,
+    hospitals_data = HOSPITALS_DATA,
+    policy_data = POLICY_DATA,
+    Wu_run_date = as.Date("2020-09-07")
 ) {
-    
+    # the census data is different between the two branches
+    # we are not sure why
     raw_census_data <- read_csv(
         file.path("data", census_branch, "census_county_interpolated.csv"),
         col_types = list(
@@ -391,6 +426,7 @@ combine_data <- function(
                 )
         }) %>%
         # on the updated_data branch, this is the 2012-2016 5-year ACS data
+        # there is no code for calculating this in the master branch though
         filter(year == 2016) %>%
         mutate(
             population_density_quantile = cut(
@@ -398,7 +434,7 @@ combine_data <- function(
                 quantile(
                     population_density,
                     probs = seq(0, 1, 0.2),
-                    # Some missing data on the updated_data branch
+                    # there's some missing data on the updated_data branch
                     na.rm = TRUE
                 ),
                 # so the lowest doesn't get left out
@@ -408,7 +444,8 @@ combine_data <- function(
             in_census_data = TRUE
         )
 
-
+    # the PM data is different between the two branches
+    # the new estimates include two extra years
     pm_data =
         read_csv(file.path("data", pm_branch, "county_pm25.csv")) %>%
             select(
@@ -435,11 +472,11 @@ combine_data <- function(
             hospital_beds = coalesce(hospital_beds, 0)
         ) %>%
         # Only use counties mentioned in both the PM data and the census data
+        # The pm data only includes counties in the continental US
         filter(in_pm_data & in_census_data) %>%
         group_by(metro_code) %>%
         mutate(
-            # There is a clear bug in Wu et al's code where they accidentally
-            # aggregate population too early
+            # There is a clear bug in Wu et al's code where they accidentally aggregate population too early
             buggy_population =
                 ifelse(
                     primary,
@@ -449,11 +486,13 @@ combine_data <- function(
         ) %>%
         ungroup()
 
-    metro_controls <-
+    metro_controls = 
         county_controls %>%
+        # we don't need to group by state, because no metro overlaps two states
+        # but we need the state names later to join in the policy data
         group_by(state_name, metro_code) %>%
         summarize(
-            # Weight most things by buggy population
+            # weight most things by buggy population
             PM2.5_concentration = 
                 weighted.mean(PM2.5_concentration, buggy_population),
             proportion_poor =
@@ -496,64 +535,73 @@ combine_data <- function(
         ) %>%
         left_join(
             county_controls %>%
-                # Wu et al. used the quantile of the primary county to represent
-                # the whole metro.
-                # This probably doesn't make a difference though, because all
-                # NYC boroughs are likely in the highest quantile
+                # Wu et al. used the quantile of the primary county to represent the whole metro.
+                # This probably doesn't make a difference though, because all the NYC boroughs are likely in the highest quantile
                 filter(primary) %>%
                 select(
                     metro_code,
                     population_density_quantile
                 )
-        )
-
+        ) %>%
+        left_join(first_covid_data) %>%
+        left_join(policy_data)
+    
     full_join(
         # Replicate the control data for all dates.
         metro_controls,
         dates_data,
         by = character()
     ) %>%
-        left_join(expanded_covid_data) %>%
-        filter(
-            # Wu only used counties mentioned by in the covid data
-            in_contemporary_covid_data | in_no_early_covid
-        ) %>%
-        mutate(
-            # If the first covid data is after the date of analysis, set to 0.
-            days_since_covid =
-                ifelse(
-                    first_confirmed_date <= date,
-                    date - first_confirmed_date + 1,
-                    NA
-                ) %>%
-                    coalesce(0)
-        ) %>%
-        left_join(policy_data) %>%
-        mutate(
-            # If the first social distancing mandate is after the date of
-            # analysis, set to 0
-            days_since_social_distancing =
-                as.numeric(Wu_run_date - social_distancing_date) %>%
-                    coalesce(0)
-        ) %>%
-        # Only use states which we have policy information for
-        filter(in_policy_data)
+    mutate(
+        # If the first covid data is after the date of analysis, set to `days_since_covid` to 0.
+        # also fill in 0 for missing
+        days_since_covid =
+            ifelse(
+                first_confirmed_date <= date,
+                date - first_confirmed_date + 1,
+                NA
+            ) %>%
+                coalesce(0),
+        # If the first social distancing mandate is after Wu's run date, set `days_since_social_distancing` to 0
+        # also fill in 0 for missing
+        days_since_social_distancing =
+            as.numeric(Wu_run_date - social_distancing_date) %>%
+                coalesce(0)
+    )
 }
 
-write_csv(
-    combine_data(dates_data),
-    file.path(
-        "data", "master", "combined.csv"
+master_controls = 
+    combine_controls(
+        census_branch = "master",
+        pm_branch = "master"
     )
-)
 
-write_csv(
-    combine_data(
-        dates_data,
-        census_branch = "updated_data",
-        pm_branch = "updated_data"
-    ),
-    file.path(
-        "data", "updated_data", "combined.csv"
+# save for the master branch
+master_controls %>%
+    inner_join(WU_COVID_DATA) %>%
+    write_csv(
+        file.path(
+            "data", "master", "combined.csv"
+        )
     )
-)
+
+# since we've cleaned the monthly covid data, we need to keep it seperate
+master_controls %>%
+    inner_join(MONTHLY_COVID_DATA) %>%
+    write_csv(
+        file.path(
+            "data", "monthly", "combined.csv"
+        )
+    )
+
+# also save for the updated_data branch
+combine_controls(
+    census_branch = "updated_data",
+    pm_branch = "updated_data"
+) %>%
+    inner_join(WU_COVID_DATA) %>%
+    write_csv(
+        file.path(
+            "data", "updated_data", "combined.csv"
+        )
+    )

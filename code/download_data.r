@@ -27,20 +27,19 @@ download_from_github("county_pm25.csv")
 download_from_github("state_policy0410.csv")
 download_from_github("temp_seasonal_county.csv")
 
-# This is different from the brfss_county_interpolated on github, which has
-# BMI's, not obesity rates.
+# This is different from the brfss_county_interpolated on github, which has BMI's, not obesity rates.
 download.file(
     "https://www.countyhealthrankings.org/sites/default/files/media/document/analytic_data2020.csv",
     file.path("data", "analytic_data2020.csv")
 )
 
-# not on github
+# Not on Wu's github
 download.file(
     "https://opendata.arcgis.com/datasets/6ac5e325468c4cb9b905f1728d6fbf0f_0.csv?outSR=%7B%22latestWkid%22%3A3857%2C%22wkid%22%3A102100%7D",
     file.path("data", "hospitals.csv")
 )
 
-# Also not on github
+# Also not on Wu's github
 download_from_JHU = function(date,
     branch_or_commit = "master"
 ) {
@@ -52,7 +51,8 @@ download_from_JHU = function(date,
     file_name = paste0(format(date, "%m-%d-%Y"), ".csv")
     download.file(
         paste0(github_folder, file_name),
-        file.path("data", "covid", file_name))
+        file.path("data", "covid", file_name)
+    )
 }
 
 walk(

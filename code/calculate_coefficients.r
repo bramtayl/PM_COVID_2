@@ -35,14 +35,7 @@ run_regression = function(one_day_data) {
   )
 }
 
-save_coefficients = function(
-  one_day_data,
-  branch = "master"
-) {
-  # print date to show progress
-  analysis_date = first(one_day_data$date)
-  print(analysis_date)
-
+calculate_coefficients = function(one_day_data) {
   run_regression(one_day_data) %>%
     # pull out coefficients
     summary %>%
@@ -55,20 +48,33 @@ save_coefficients = function(
       standard_error = `Std. Error`,
       z_value = `z value`,
       p_value = `Pr(>|z|)`
-    ) %>%
-    # write to file
-    write_csv(file.path(
-      "data",
-      branch,
-      "coefficients",
-      paste0(analysis_date, ".csv")
-    ))
+    )
+}
+
+save_coefficients = function(
+  one_day_data,
+  branch = "master"
+) {
+  # print data to show progress
+  analysis_date = first(one_day_data$date)
+  print(analysis_date)
+
+  one_day_data %>%
+  calculate_coefficients() %>%
+  # write to file
+  write_csv(file.path(
+    "data",
+    branch,
+    "coefficients",
+    paste0(analysis_date, ".csv")
+  ))
   
   NULL
 }
 
-# if you stop the code before R finished running it
-# you can resume by choosing a later first_date
+# if you stop the code before R finished running it,
+# you can resume by choosing a later `first_date`
+# start on 2020-04-18 by default. this is the first date in Wu's plot.
 save_daily_coefficients = function (data, branch, first_date = as.Date("2020-04-18")) {
     data %>%
     filter(date >= first_date) %>%
@@ -82,3 +88,12 @@ save_daily_coefficients(master_data, "master")
 
 updated_data = read_csv(file.path("data", "updated_data", "combined.csv"))
 save_daily_coefficients(updated_data, "updated_data")
+
+# also use monthly mortality
+monthly_data = 
+  read_csv(file.path("data", "monthly", "combined.csv")) %>%
+  select(-cumulative_covid_deaths) %>%
+  # just renaming here is easier than writing a new function
+  rename(cumulative_covid_deaths = monthly_covid_deaths)
+# skip a month, so that, when you go back a month, this covers the same period of data
+save_daily_coefficients(monthly_data, "monthly", first_date = as.Date("2020-05-18"))
