@@ -3,7 +3,7 @@ library(purrr)
 # Download as much as we can from Wu's folder on github.
 download_from_github = function(file_name,
     base_url = "https://raw.githubusercontent.com/wxwx1993/PM_COVID",
-    branch = "master"
+    branch_or_commit = "master"
 ) {
     download.file(
         paste0(base_url, "/", branch, "/Data/", file_name),

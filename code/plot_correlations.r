@@ -1,6 +1,7 @@
 library(dplyr)
 library(ggplot2)
 library(readr)
+library(scales)
 library(tidyr)
 
 correlations <-
@@ -66,7 +67,10 @@ plot = x_axis_dates(
   geom_line() +
   # get rid of gray background
   theme_bw() +
-  labs(y = "r (correlation coefficient)")
+  labs(y = "r (correlation coefficient)") + 
+  scale_y_continuous(labels = label_number(
+    style_negative = "minus"
+  ))
 )
 
 ggsave(file.path("results", "monthly", "color_graph.png"),

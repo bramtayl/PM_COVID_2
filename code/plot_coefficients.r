@@ -35,8 +35,8 @@ combine_coefficients = function(folder,
     upper_bound = exp(log_estimate + confidence_interval_z_score * standard_error),
     Period = ifelse(
       between(date, as.Date("2020-04-18"), as.Date("2020-09-07")),
-      "Considered by Wu et al.",
-      "Not considered by Wu et al."
+      "Considered by Wu et al., 2020",
+      "Not considered by Wu et al., 2020"
     )
   )
 }
@@ -119,7 +119,7 @@ master_coefficients %>%
 early_plot = MMR_plot(
   ggplot(
     master_coefficients %>%
-    filter(variable == "PM2.5_concentration" & Period == "Considered by Wu et al.")
+    filter(variable == "PM2.5_concentration" & Period == "Considered by Wu et al., 2020")
   ) +
   aes(
     x = date,
